@@ -1,0 +1,19 @@
+# Build artifacts
+/target/
+*.o
+*.so
+*.dylib
+
+# Binary
+/veric
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
