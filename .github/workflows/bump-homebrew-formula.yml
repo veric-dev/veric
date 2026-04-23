@@ -1,0 +1,98 @@
+name: bump homebrew formula
+
+# Fires whenever a Release is published on this (public) hub repo.
+# The `veric-platform` cli-release workflow mirrors its release here
+# as the final step, so this workflow is the natural "release is live"
+# signal for downstream distribution updates.
+#
+# Skipped for prerelease tags — those are served by the sister tap
+# veric-dev/homebrew-veric-dev, which is bumped out of the rehearsal
+# flow directly.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  bump:
+    if: github.event.release.prerelease == false
+    name: rewrite veric-dev/homebrew-veric Formula/veric.rb
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout homebrew-veric
+        uses: actions/checkout@v4
+        with:
+          repository: veric-dev/homebrew-veric
+          # HOMEBREW_BUMP_PAT: fine-grained PAT scoped to
+          # veric-dev/homebrew-veric with Contents: Write. Do not reuse
+          # AG_TOWER_PAT here — blast radius should be one repo, not the
+          # whole org. Expires yearly; calendar reminder lives on the
+          # release engineer.
+          token: ${{ secrets.HOMEBREW_BUMP_PAT }}
+
+      - name: Resolve new version + shas from release assets
+        id: resolve
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          # The release workflow publishes companion .sha256 files for
+          # each archive; fetching those is cheaper than re-downloading
+          # the archives and hashing them locally.
+          MAC_SHA=$(curl -fsSL \
+            "https://github.com/veric-dev/veric/releases/download/${TAG}/veric-${VERSION}-macos-arm64.tar.gz.sha256" \
+            | awk '{print $1}')
+          LINUX_SHA=$(curl -fsSL \
+            "https://github.com/veric-dev/veric/releases/download/${TAG}/veric-${VERSION}-linux-x86_64.tar.gz.sha256" \
+            | awk '{print $1}')
+          echo "version=${VERSION}"      >> "$GITHUB_OUTPUT"
+          echo "mac_sha=${MAC_SHA}"      >> "$GITHUB_OUTPUT"
+          echo "linux_sha=${LINUX_SHA}"  >> "$GITHUB_OUTPUT"
+
+      - name: Rewrite Formula/veric.rb
+        env:
+          NEW_VERSION: ${{ steps.resolve.outputs.version }}
+          MAC_SHA:     ${{ steps.resolve.outputs.mac_sha }}
+          LINUX_SHA:   ${{ steps.resolve.outputs.linux_sha }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          version   = os.environ["NEW_VERSION"]
+          shas      = [os.environ["MAC_SHA"], os.environ["LINUX_SHA"]]
+          p         = pathlib.Path("Formula/veric.rb")
+          text      = p.read_text()
+
+          # version line
+          text = re.sub(r'version "[^"]+"', f'version "{version}"', text, count=1)
+
+          # Two sha256 lines, in source order: macOS arm64 first, Linux x86_64
+          # second. The formula deliberately keeps that order so this
+          # ordered re.sub does the right thing.
+          it = iter(shas)
+          text = re.sub(
+              r'sha256 "[0-9a-f]{64}"',
+              lambda m: f'sha256 "{next(it)}"',
+              text,
+          )
+
+          p.write_text(text)
+          PY
+          git diff Formula/veric.rb
+
+      - name: Commit + push bump
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          git config user.name  "veric-release-bot"
+          git config user.email "release-bot@users.noreply.github.com"
+          git add Formula/veric.rb
+          # If no version actually changed (e.g. workflow re-run), don't
+          # fail the job — just exit cleanly.
+          if git diff --cached --quiet; then
+            echo "Formula already up to date for ${TAG}, nothing to commit."
+            exit 0
+          fi
+          git commit -m "veric ${TAG#v}"
+          git push
