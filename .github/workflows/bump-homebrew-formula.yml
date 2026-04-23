@@ -24,12 +24,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: veric-dev/homebrew-veric
-          # HOMEBREW_BUMP_PAT: fine-grained PAT scoped to
-          # veric-dev/homebrew-veric with Contents: Write. Do not reuse
-          # AG_TOWER_PAT here — blast radius should be one repo, not the
-          # whole org. Expires yearly; calendar reminder lives on the
-          # release engineer.
-          token: ${{ secrets.HOMEBREW_BUMP_PAT }}
+          # Reuses AG_TOWER_PAT — same token the rest of the release
+          # pipeline leans on today. Splitting into a repo-scoped
+          # HOMEBREW_BUMP_PAT would cut blast radius, but until that
+          # trade-off is worth the extra PAT to rotate, one token
+          # covers every cross-repo write.
+          token: ${{ secrets.AG_TOWER_PAT }}
 
       - name: Resolve new version + shas from release assets
         id: resolve
