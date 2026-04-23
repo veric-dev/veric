@@ -62,9 +62,33 @@ surfaces the disagreement. That's where silent bugs live.
 
 ## Install
 
-Download a pre-built binary from [Releases](https://github.com/veric-dev/veric/releases).
+Download a pre-built binary from [Releases](https://github.com/veric-dev/veric/releases),
+or use the install script / Homebrew tap:
+
+```sh
+# install.sh (macOS + Linux)
+curl -fsSL https://raw.githubusercontent.com/veric-dev/veric/main/install.sh | sh
+
+# Homebrew (stable channel)
+brew tap veric-dev/veric
+brew install veric
+```
 
 Single binary. No Python, no Node, no Docker, no runtime.
+
+### macOS first-launch note
+
+Until v0.1 notarisation ships, macOS binaries are code-signed but not
+yet Apple-notarised. On a fresh Mac, Gatekeeper may block first launch
+with `"veric" cannot be opened because Apple cannot check it for
+malicious software`. One-time workaround:
+
+```sh
+xattr -d com.apple.quarantine "$(which veric)"
+```
+
+After that the binary launches normally. This step will go away once
+notarisation is wired up on the release pipeline.
 
 ## What it does
 
